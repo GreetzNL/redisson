@@ -28,6 +28,8 @@ import java.util.Set;
 import java.util.concurrent.TimeUnit;
 
 import org.apache.catalina.session.StandardSession;
+import org.apache.juli.logging.Log;
+import org.apache.juli.logging.LogFactory;
 import org.redisson.api.RMap;
 import org.redisson.api.RTopic;
 import org.redisson.tomcat.RedissonSessionManager.ReadMode;
@@ -41,6 +43,8 @@ import org.redisson.tomcat.RedissonSessionManager.UpdateMode;
  */
 public class RedissonSession extends StandardSession {
 
+	private final Log log = LogFactory.getLog(RedissonSession.class);
+	
     private static final String IS_NEW_ATTR = "session:isNew";
     private static final String IS_VALID_ATTR = "session:isValid";
     private static final String THIS_ACCESSED_TIME_ATTR = "session:thisAccessedTime";
@@ -241,7 +245,7 @@ public class RedissonSession extends StandardSession {
     @Override
     public void setAttribute(String name, Object value, boolean notify) {
         super.setAttribute(name, value, notify);
-        
+        log.debug("Setting attribute "+name+" on session");
         if (updateMode == UpdateMode.DEFAULT && map != null && value != null) {
             fastPut(name, value);
         }
@@ -264,7 +268,9 @@ public class RedissonSession extends StandardSession {
     }
     
     public void save() {
-        if (map == null) {
+    	log.info("Saving session to Redis");
+    	if (map == null) {
+    		log.debug("Getting new session map from Redis with id "+id);
             map = redissonManager.getMap(id);
         }
         
@@ -281,7 +287,7 @@ public class RedissonSession extends StandardSession {
                 newMap.put(entry.getKey(), entry.getValue());
             }
         }
-        
+        log.debug("Storing session");
         map.putAll(newMap);
         if (readMode == ReadMode.MEMORY) {
             topic.publish(createPutAllMessage(newMap));
@@ -291,7 +297,8 @@ public class RedissonSession extends StandardSession {
     }
     
     public void load(Map<String, Object> attrs) {
-        Long creationTime = (Long) attrs.remove(CREATION_TIME_ATTR);
+        log.info("Loading from Redis attribute map");
+    	Long creationTime = (Long) attrs.remove(CREATION_TIME_ATTR);
         if (creationTime != null) {
             this.creationTime = creationTime;
         }

@@ -112,6 +112,7 @@ public class RedissonSessionManager extends ManagerBase {
 
     @Override
     public Session createSession(String sessionId) {
+    	log.debug("Create new session with session id "+sessionId);
         RedissonSession session = (RedissonSession) createEmptySession();
         
         session.setNew(true);
@@ -143,6 +144,7 @@ public class RedissonSessionManager extends ManagerBase {
     
     @Override
     public Session findSession(String id) throws IOException {
+    	log.debug("Looking up session with session id "+id);
         Session result = super.findSession(id);
         if (result == null) {
             if (id != null) {
@@ -169,9 +171,14 @@ public class RedissonSessionManager extends ManagerBase {
                 
                 session.access();
                 session.endAccess();
+                log.debug("Returning session from Redis");
                 return session;
             }
             return null;
+        }
+        else
+        {
+        	log.debug("Session found already, no need to check in Redis");
         }
 
         result.access();
@@ -208,7 +215,7 @@ public class RedissonSessionManager extends ManagerBase {
     protected void startInternal() throws LifecycleException {
         super.startInternal();
         redisson = buildClient();
-        
+        log.debug("Starting...");
         final ClassLoader applicationClassLoader;
         if (Thread.currentThread().getContextClassLoader() != null) {
             applicationClassLoader = Thread.currentThread().getContextClassLoader();
@@ -217,15 +224,18 @@ public class RedissonSessionManager extends ManagerBase {
         }
         
         if (updateMode == UpdateMode.AFTER_REQUEST) {
+        	log.debug("Starting in 'AFTER_REQUEST' update mode");
             getEngine().getPipeline().addValve(new UpdateValve(this));
         }
         
         if (readMode == ReadMode.MEMORY) {
+        	log.debug("Starting in 'MEMORY' read mode");
             RTopic updatesTopic = getTopic();
             updatesTopic.addListener(AttributeMessage.class, new MessageListener<AttributeMessage>() {
                 
                 @Override
                 public void onMessage(CharSequence channel, AttributeMessage msg) {
+                	log.debug("Received message from topic");
                     try {
                         // TODO make it thread-safe
                         RedissonSession session = (RedissonSession) RedissonSessionManager.super.findSession(msg.getSessionId());
@@ -284,7 +294,7 @@ public class RedissonSessionManager extends ManagerBase {
     @Override
     protected void stopInternal() throws LifecycleException {
         super.stopInternal();
-        
+        log.debug("Stopping...");
         setState(LifecycleState.STOPPING);
         
         try {
@@ -303,13 +313,20 @@ public class RedissonSessionManager extends ManagerBase {
 
     public void store(HttpSession session) throws IOException {
         if (session == null) {
+        	log.debug("Store was called, but session was null");
             return;
         }
         
         if (updateMode == UpdateMode.AFTER_REQUEST) {
+        	log.debug("Store was called, try to find the session");
             RedissonSession sess = (RedissonSession) super.findSession(session.getId());
             if (sess != null) {
+            	log.debug("Saving to Redis");
                 sess.save();
+            }
+            else
+            {
+            	log.debug("Session could not be found for storage");
             }
         }
     }
